@@ -1,7 +1,9 @@
 # coding: utf-8
 import SocketServer
+from mimetools import Message
+from StringIO import StringIO
 
-# Copyright 2013 Abram Hindle, Eddie Antonio Santos
+# Copyright 2015 Morgan Patzelt
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +29,7 @@ import SocketServer
 # try: curl -v -X GET http://127.0.0.1:8080/
 
 
-class MyWebServer(SocketServer.BaseRequestHandler):
+class MyWebServer(SocketServer.StreamRequestHandler):
     
     # parses the request from the client
     # returns 1 if successful, else 0
@@ -35,12 +37,15 @@ class MyWebServer(SocketServer.BaseRequestHandler):
     # if 1, a response occurs
     def parse_request():
         # get request line
-        requestline = self.request.readline()
-        # get headers
-        headers = self.request.split()
+        raw_requestline = self.raw_requestline
+    
+        # splits the raw requstline into the request line and headers
+        requestline, headers_alone = request_text.split('\r\n', 1)
+        # adds the headerts to a dictionary 'headers' using Message from mimetools (See Import)
+        headers = Message(StringIO(headers_alone))
         
-        self.requestline = requestline
-        words = requestline.split()
+        # splits the words of the requestline
+        words = requestline.split()        
         
         # Get the command
         command = words[0]
@@ -53,37 +58,58 @@ class MyWebServer(SocketServer.BaseRequestHandler):
             # Success
             version = words[2]
             if version == 'HTTP/1.1':
-                if 'Host:' not in headers:
+                # Test to see if request contains Host: header
+                # Only needed in HTTP 1.1
+                if 'Host' not in headers:
                     send_error(400, "Bad Request - No Host: header specified")
         
         # Specify path or absolute URL
-        if words[1][:7] == 'http://':
-            # absolute URL
-            absoluteURL = words[1]
-            self.absoluteURL = absoluteURL
+        if words[1][1] == 'http://':
+            # absolute path
+            path = words[1][7:]
+            url, path = path.split('/', 1)
+            path = "/" + path
         else:
             # path
             path = words[1]
-            self.path = path
-        
+            
+
         # set variables
+        self.path = path
         self.command = command
-        self.version = version
+        self.request_version = version
         self.headers = headers
         
         #return 1 if was a sucesss, else 0
         return 1    
     
-    # provided 
+    # Handles a single HTTP request 
     def handle(self):
-        self.data = self.request.recv(1024).strip()
-        print ("Got a request of: %s\n" % self.data)
-        self.request.sendall("OK")
+        # gets the request line, sets it to raw_requestline
+        self.raw_requestline = self.rfile.readline()
+        
+        # If an error occurs during parsing
+        # An error code has been sent, just exit
+        if not self.parse_request(): 
+            return
+        
+        # concatanate 'do_' with the command type to get method name (i.e. do_GET)
+        mname = 'do_' + self.command
+        
+        # if this method has not been implemented, send 5XX error
+        if not hasattr(self, mname):
+            self.send_error(501, "Unsupported method (%s)" % self.command)
+            return
+        
+        # if the method exists, call method
+        method = getattr(self, mname)
+        method()
+        
         
     # called when an error occurs
     # matches the error code with a message
     # if a message was provided, that message is used instead
-    def send_error(self, code, message=None):
+    def send_response(self, code, message=None):
         # list of responses used in this code
         responses = {
             200: ('OK', 'Request fulfilled, document follows'),
@@ -98,11 +124,11 @@ class MyWebServer(SocketServer.BaseRequestHandler):
             message = shortmsg
         
         #call print_error_msg to print output for client
-        print_error_msg(code, message, longmsg)
+        print_msg(code, message, longmsg)
     
     # prints the error message if an error message is sent
     # called by send error
-    def print_error_msg(self, code, message, longmsg):
+    def print_msg(self, code, message, longmsg):
         # creates the html output to tell the client the error
         htmlres = "<html><body>\r\n<h2>" + message + "</h2>\r\n" + longmsg + "</body></html>"
         # counts the length of the html output
@@ -133,6 +159,20 @@ class MyWebServer(SocketServer.BaseRequestHandler):
         
         # string
         return date
+    
+    # sends a MIME header
+    def send_header(self, header, value):
+        # no headers in HTTP/0.9
+        if self.request_version != 'HTTP/0.9':
+            self.wfile.write("%s: %s\r\n" % (header, value))
+    
+    # sends the blank line that indicates no more MIME headers
+    def end_headers(self):
+        # no headers in HTTP/0.9
+        if self.request_version != 'HTTP/0.9':
+            self.wfile.write("\r\n")
+                
+        
         
         
         
@@ -154,7 +194,7 @@ if __name__ == "__main__":
 
 protocol_version = "HTTP/1.1" # MIGHT HAVE TO CHANGE THIS
 
-r
+
 
 
         
