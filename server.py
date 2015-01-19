@@ -1,5 +1,7 @@
 # coding: utf-8
 import SocketServer
+import sys
+import time
 from mimetools import Message
 from StringIO import StringIO
 
@@ -31,16 +33,18 @@ from StringIO import StringIO
 
 class MyWebServer(SocketServer.StreamRequestHandler):
     
+    __version__ = 1.0
+    
     # parses the request from the client
     # returns 1 if successful, else 0
     # if 0, an error message is sent
     # if 1, a response occurs
-    def parse_request():
+    def parse_request(self):
         # get request line
         raw_requestline = self.raw_requestline
     
         # splits the raw requstline into the request line and headers
-        requestline, headers_alone = request_text.split('\r\n', 1)
+        requestline, headers_alone = raw_requestline.split('\r\n', 1)
         # adds the headerts to a dictionary 'headers' using Message from mimetools (See Import)
         headers = Message(StringIO(headers_alone))
         
@@ -51,20 +55,20 @@ class MyWebServer(SocketServer.StreamRequestHandler):
         command = words[0]
         
         # Check the version
+        version = words[2]
+        self.version = version
         if words[2][:5] != 'HTTP/':
-            send_error(400, "Bad Request - Version (%s)" % version)
-            return 0
+            self.send_error(400, "Bad Request - Version (%s)" % version)
         else: 
             # Success
-            version = words[2]
             if version == 'HTTP/1.1':
                 # Test to see if request contains Host: header
                 # Only needed in HTTP 1.1
                 if 'Host' not in headers:
-                    send_error(400, "Bad Request - No Host: header specified")
-        
+                    self.send_error(400, "Bad Request - No Host: header specified")
+                
         # Specify path or absolute URL
-        if words[1][1] == 'http://':
+        if words[1][:7] == 'http://':
             # absolute path
             path = words[1][7:]
             url, path = path.split('/', 1)
@@ -77,7 +81,6 @@ class MyWebServer(SocketServer.StreamRequestHandler):
         # set variables
         self.path = path
         self.command = command
-        self.request_version = version
         self.headers = headers
         
         #return 1 if was a sucesss, else 0
@@ -104,12 +107,14 @@ class MyWebServer(SocketServer.StreamRequestHandler):
         # if the method exists, call method
         method = getattr(self, mname)
         method()
+        #actually send the response if not already done
+        self.wfile.flush() 
         
         
     # called when an error occurs
     # matches the error code with a message
     # if a message was provided, that message is used instead
-    def send_response(self, code, message=None):
+    def send_error(self, code, message=None):
         # list of responses used in this code
         responses = {
             200: ('OK', 'Request fulfilled, document follows'),
@@ -124,7 +129,7 @@ class MyWebServer(SocketServer.StreamRequestHandler):
             message = shortmsg
         
         #call print_error_msg to print output for client
-        print_msg(code, message, longmsg)
+        self.print_msg(code, message, longmsg)
     
     # prints the error message if an error message is sent
     # called by send error
@@ -135,15 +140,41 @@ class MyWebServer(SocketServer.StreamRequestHandler):
         length = len(htmlres)
         
         # writes the message that goes above the html output
-        self.wfile.write(self.version + " " + code + " " + message)
-        self.wfile.write("Content-Type: text/html")
-        self.wfile.write("Content-Length: " + length)
-        self.wfile.write("\r\n")
+        self.send_responseline(code, message)
+        self.send_header("Content-Type", "text/html")
+        self.send_header("Content-Length", str(length))
+        self.end_headers()
         self.wfile.write(htmlres)
     
+    def send_response(self, code, message=None):
+        # list of responses used in this code
+        responses = {
+            200: ('OK', 'Request fulfilled, document follows'),
+            400: ('Bad request', 'Bad request syntax or unsupported method'),
+            500: ('Internal error', 'Server got itself in trouble'),
+            501: ('Not implemented', 'Server does not support this operation')
+            }
+
+        shortmsg, longmsg = responses[code]
+        # if a message is provided, use that instead
+        if not message:
+            message = shortmsg
+        
+        self.send_responseline(code, message) 
+        self.send_header("Server", self.version_string())
+        self.send_header("Date", self.get_date())
+    
+    def send_responseline(self, code, message):
+        self.wfile.write(self.version + " " + str(code) + " " + message + "\r\n")
+    
+    def version_string(self):
+        sys_version = "Python/" + str(sys.version.split()[0])      
+        server_version = "MyWebServer/" + str(__version__)       
+        return server_version + " " + sys_version
+    
     # returns the date in the proper format for GMT
-    def get_date():
-        currTime = time.time()
+    def get_date(self):
+        currTime = time.time(self)
         year, mm, dd, h, m, s, wday, yday, isdst = time.gmtime(currTime)
         
         # converts the month from number format to 3-letter abbreviation
@@ -163,14 +194,29 @@ class MyWebServer(SocketServer.StreamRequestHandler):
     # sends a MIME header
     def send_header(self, header, value):
         # no headers in HTTP/0.9
-        if self.request_version != 'HTTP/0.9':
+        if self.version != 'HTTP/0.9':
             self.wfile.write("%s: %s\r\n" % (header, value))
     
     # sends the blank line that indicates no more MIME headers
     def end_headers(self):
         # no headers in HTTP/0.9
-        if self.request_version != 'HTTP/0.9':
+        if self.version != 'HTTP/0.9':
             self.wfile.write("\r\n")
+            
+    def address_string(self):
+        
+        host, port = self.client_address[:2]
+        return socket.getfqdn(host) 
+    
+    protocol_version = "HTTP/1.1"
+
+class MyServer(SocketServer.TCPServer):
+    
+    def server_bind(self):
+        SocketServer.TCPServer.server_bind(self)
+        host, port = self.socket.getsockname()[:2]
+        self.server_name = socket.getfqdn(host)
+        self.server_port = port
                 
         
         
@@ -180,19 +226,6 @@ class MyWebServer(SocketServer.StreamRequestHandler):
             
         
 
-if __name__ == "__main__":
-    HOST, PORT = "localhost", 8080
-
-    SocketServer.TCPServer.allow_reuse_address = True
-    # Create the server, binding to localhost on port 8080
-    server = SocketServer.TCPServer((HOST, PORT), MyWebServer)
-
-    # Activate the server; this will keep running until you
-    # interrupt the program with Ctrl-C
-    server.serve_forever()
-
-
-protocol_version = "HTTP/1.1" # MIGHT HAVE TO CHANGE THIS
 
 
 

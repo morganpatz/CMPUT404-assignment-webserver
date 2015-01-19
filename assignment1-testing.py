@@ -1,8 +1,10 @@
 import time
+import sys
 from mimetools import Message
 from StringIO import StringIO
 
 class myClass:
+    __version__ = 0.1
     def send_error(code, message):
         print (message)
     
@@ -85,10 +87,15 @@ class myClass:
         date = "%s, %02d %3s %4d %02d:%02d:%02d GMT" % (wday, dd, mm, year, h, m, s)
         
         return date
+    
+    def sys_version():
+        sys_version = "Python/" + sys.version.split()[0]
+        
+        server_version = "BaseHTTP/" + __version__
                 
         
     if __name__ == '__main__':
-        parse_request()
+        sys_version()
 
 
     

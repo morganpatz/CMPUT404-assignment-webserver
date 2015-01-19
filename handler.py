@@ -25,12 +25,13 @@ class MyHandler(MyWebServer):
     
     def do_HEAD(self):
         self.send_error(501, 'do_HEAD not implemented')
-    
+    """
     # provided 
     def handle(self):
         self.data = self.request.recv(1024).strip()
         print ("Got a request of: %s\n" % self.data)
-        self.request.sendall("OK")    
+        self.request.sendall("OK")  
+    """
     
     
 def main():
