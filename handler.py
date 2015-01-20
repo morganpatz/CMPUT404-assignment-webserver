@@ -7,21 +7,32 @@ class MyHandler(MyWebServer):
     
     def do_GET(self):
         try:
-            f = open(cirdir + sep + self.path)
+            reply = False
+            if self.path[-4:] == ".css":
+                self.contenttype = "text/css"
+                reply = True
+            if self.path[-5:] == ".html":   
+                self.contenttype = "text/html"
+                reply = True
             
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.wfile.write(f.read())
-            f.close()
+            if reply == True:
+                f = open(curdir + sep + self.path)
+                self.send_response(200)
+                self.send_header('Content-type', MyHandler.contenttype)
+                self.send_header('Content-length', 0)
+                self.end_headers()
+                self.wfile.write(f.read())
+                f.close()
+            else:
+                self.send_error(404, "File Not Found: %s" % self.path)
+        
         except:
-            self.send_error(404, 'File Not Found: %s' % self.path)
+            self.send_error(404, "File Not Found: %s" % self.path)
 
         
     def do_POST(self):
         self.send_error(501, 'do_POST not implemented')
                 
-
 
     
     def do_HEAD(self):
@@ -33,7 +44,8 @@ class MyHandler(MyWebServer):
         print ("Got a request of: %s\n" % self.data)
         self.request.sendall("OK")  
     """
-    
+
+
     
 def main():
     HOST, PORT = "localhost", 8080
@@ -45,6 +57,9 @@ def main():
     # Activate the server; this will keep running until you
     # interrupt the program with Ctrl-C
     server.serve_forever()
+    
+
+    
     
 if __name__ == '__main__':
     main()

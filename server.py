@@ -41,7 +41,7 @@ class MyWebServer(SocketServer.StreamRequestHandler):
     # if 1, a response occurs
     def parse_request(self):
         # get request line
-        raw_requestline = self.raw_requestline
+        raw_requestline = self.data
     
         # splits the raw requstline into the request line and headers
         requestline, headers_alone = raw_requestline.split('\r\n', 1)
@@ -82,34 +82,54 @@ class MyWebServer(SocketServer.StreamRequestHandler):
         self.command = command
         self.headers = headers
         
-        self.wfile.write("\r\n") 
-        
         #return 1 if was a sucesss, else 0
         return 1    
+    
+    def do_GET(self):
+        
+        try:
+            # if the request is in CSS
+            if self.path.contains(".css"):
+                f = open(curdir + sep + self.path)
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/css')
+                self.send_header('Content-length', 0)
+                self.end_headers()
+                self.wfile.write(f.read())
+                f.close()
+            # if the request is in HTML
+            if self.path.contains(".html"):   
+                f = open(curdir + sep + self.path)
+                self.send_response(200)
+                self.send_header('Content-Type', contenttype)
+                self.send_header('Content-length', 0)
+                self.end_headers()
+                self.wfile.write(f.read())
+                f.close()
+        
+        
+        except:
+            self.send_error(404, "File Not Found: %s" % self.path)        
     
     # Handles a single HTTP request 
     def handle(self):
         # gets the request line, sets it to raw_requestline
-        self.raw_requestline = self.rfile.readline()
+        self.data = self.request.recv(1024).strip()
+        print ("Got a request of: %s\n" % self.data)
+        print self.request.sendall("OK")
         
         # If an error occurs during parsing
         # An error code has been sent, just exit
         if not self.parse_request(): 
             return
         
-        # concatanate 'do_' with the command type to get method name (i.e. do_GET)
-        mname = 'do_' + self.command
-        
-        # if this method has not been implemented, send 5XX error
-        if not hasattr(self, mname):
+        # run do_GET if the command is GET
+        if self.command == "GET":
+            self.do_GET()
+        # if the command is not GET, it is not supported
+        else:
             self.send_error(501, "Unsupported method (%s)" % self.command)
-            return
-        
-        # if the method exists, call method
-        method = getattr(self, mname)
-        method()
-        #actually send the response if not already done
-        self.wfile.flush() 
+            return        
         
         
     # called when an error occurs
@@ -117,12 +137,12 @@ class MyWebServer(SocketServer.StreamRequestHandler):
     # if a message was provided, that message is used instead
     def send_error(self, code, message=None):
         # list of responses used in this code
-        responses = {
-            200: ('OK', 'Request fulfilled, document follows'),
-            400: ('Bad request', 'Bad request syntax or unsupported method'),
-            500: ('Internal error', 'Server got itself in trouble'),
-            501: ('Not implemented', 'Server does not support this operation')
-            }
+        responses = {200: ('OK', 'Request fulfilled, document follows'),
+                     400: ('Bad request', 'Bad request syntax or unsupported method'),
+                     404: ('Not Found', 'Nothing matches the given URI'), 
+                     500: ('Internal error', 'Server got itself in trouble'),
+                     501: ('Not implemented', 'Server does not support this operation')
+                     }
 
         shortmsg, longmsg = responses[code]
         # if a message is provided, use that instead
@@ -142,19 +162,19 @@ class MyWebServer(SocketServer.StreamRequestHandler):
         
         # writes the message that goes above the html output
         self.send_responseline(code, message)
-        self.send_header("Content-type", "text/html")
+        self.send_header("Content-type", 'text/html')
         self.send_header("Content-Length", str(length))
         self.end_headers()
         self.wfile.write(htmlres)
     
     def send_response(self, code, message=None):
         # list of responses used in this code
-        responses = {
-            200: ('OK', 'Request fulfilled, document follows'),
-            400: ('Bad request', 'Bad request syntax or unsupported method'),
-            500: ('Internal error', 'Server got itself in trouble'),
-            501: ('Not implemented', 'Server does not support this operation')
-            }
+        responses = {200: ('OK', 'Request fulfilled, document follows'),
+                     400: ('Bad request', 'Bad request syntax or unsupported method'),
+                     404: ('Not Found', 'Nothing matches the given URI'),
+                     500: ('Internal error', 'Server got itself in trouble'),
+                     501: ('Not implemented', 'Server does not support this operation')
+                     }
 
         shortmsg, longmsg = responses[code]
         # if a message is provided, use that instead
@@ -164,18 +184,6 @@ class MyWebServer(SocketServer.StreamRequestHandler):
              
         
         self.send_responseline(code, message) 
-        self.send_header("Server", self.version_string())
-        self.send_header("Date", self.get_date())
-        """
-        if self.path[-4:] == ".css":
-            send_header('Content-type', 'text/css')
-        elif self.path[-5:] == ".html":
-            send_header('Content-type', 'text/html')
-        else:
-            self.send_header('Content-type', 'text/plain') 
-        """
-        
-        self.end_headers()
     
     def send_responseline(self, code, message):
         self.wfile.write(self.version + " " + str(code) + " " + message + "\r\n")
@@ -208,7 +216,7 @@ class MyWebServer(SocketServer.StreamRequestHandler):
     def send_header(self, header, value):
         # no headers in HTTP/0.9
         if self.version != 'HTTP/0.9':
-            self.wfile.write("%s: %s\r\n" % (header, value))
+            self.wfile.write("%s: %s" % (header, value))
     
     # sends the blank line that indicates no more MIME headers
     def end_headers(self):
@@ -221,15 +229,27 @@ class MyWebServer(SocketServer.StreamRequestHandler):
         host, port = self.client_address[:2]
         return socket.getfqdn(host) 
     
+    
+    
     protocol_version = "HTTP/1.1"
 
-class MyServer(SocketServer.TCPServer):
+
+def main():
+    HOST, PORT = "localhost", 8080
+   
+    SocketServer.TCPServer.allow_reuse_address = True
+    # Create the server, binding to localhost on port 8080
+    server = SocketServer.TCPServer((HOST, PORT), MyWebServer)
+
+    # Activate the server; this will keep running until you
+    # interrupt the program with Ctrl-C
+    server.serve_forever()
     
-    def server_bind(self):
-        SocketServer.TCPServer.server_bind(self)
-        host, port = self.socket.getsockname()[:2]
-        self.server_name = socket.getfqdn(host)
-        self.server_port = port
+    
+if __name__ == '__main__':
+    main()
+
+
                 
         
         
