@@ -22,6 +22,7 @@ class MyHandler(MyWebServer):
         self.send_error(501, 'do_POST not implemented')
                 
 
+
     
     def do_HEAD(self):
         self.send_error(501, 'do_HEAD not implemented')

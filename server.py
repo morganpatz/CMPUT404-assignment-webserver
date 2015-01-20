@@ -59,13 +59,13 @@ class MyWebServer(SocketServer.StreamRequestHandler):
         self.version = version
         if words[2][:5] != 'HTTP/':
             self.send_error(400, "Bad Request - Version (%s)" % version)
-        else: 
+        #else: 
             # Success
-            if version == 'HTTP/1.1':
+            #if version == 'HTTP/1.1':
                 # Test to see if request contains Host: header
                 # Only needed in HTTP 1.1
-                if 'Host' not in headers:
-                    self.send_error(400, "Bad Request - No Host: header specified")
+                #if 'Host' not in headers:
+                    #self.send_error(400, "Bad Request - No Host: header specified")
                 
         # Specify path or absolute URL
         if words[1][:7] == 'http://':
@@ -76,12 +76,13 @@ class MyWebServer(SocketServer.StreamRequestHandler):
         else:
             # path
             path = words[1]
-            
 
         # set variables
         self.path = path
         self.command = command
         self.headers = headers
+        
+        self.wfile.write("\r\n") 
         
         #return 1 if was a sucesss, else 0
         return 1    
@@ -141,7 +142,7 @@ class MyWebServer(SocketServer.StreamRequestHandler):
         
         # writes the message that goes above the html output
         self.send_responseline(code, message)
-        self.send_header("Content-Type", "text/html")
+        self.send_header("Content-type", "text/html")
         self.send_header("Content-Length", str(length))
         self.end_headers()
         self.wfile.write(htmlres)
@@ -160,9 +161,21 @@ class MyWebServer(SocketServer.StreamRequestHandler):
         if not message:
             message = shortmsg
         
+             
+        
         self.send_responseline(code, message) 
         self.send_header("Server", self.version_string())
         self.send_header("Date", self.get_date())
+        """
+        if self.path[-4:] == ".css":
+            send_header('Content-type', 'text/css')
+        elif self.path[-5:] == ".html":
+            send_header('Content-type', 'text/html')
+        else:
+            self.send_header('Content-type', 'text/plain') 
+        """
+        
+        self.end_headers()
     
     def send_responseline(self, code, message):
         self.wfile.write(self.version + " " + str(code) + " " + message + "\r\n")

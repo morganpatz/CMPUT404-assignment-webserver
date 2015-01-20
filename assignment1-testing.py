@@ -92,10 +92,23 @@ class myClass:
         sys_version = "Python/" + sys.version.split()[0]
         
         server_version = "BaseHTTP/" + __version__
+    
+    def add_header(self, key, value):
+        print ("%s: %s" % key, value)    
+    
+    def path_ending():
+        path = "/base.css"
+        #path = "/base.html"
+        
+        if path[-4:] == ".css":
+            key = 'Content-type'
+            value = 'text/css'
+            print ("%s: %s" % (key, value))
+            
                 
         
     if __name__ == '__main__':
-        sys_version()
+        path_ending()
 
 
     
